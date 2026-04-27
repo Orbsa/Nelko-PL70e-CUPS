@@ -1,0 +1,16 @@
+.direnv/
+result
+result-*
+__pycache__/
+*.pyc
+.venv/
+
+# capture artifacts
+*.btsnoop
+*.pcap
+*.pcapng
+captures/
+
+# the vendor .deb is fetched at build/install time; do not check it in
+drivers/nelko_pl70e_linux.deb
+drivers/extracted/

@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Interactive scan-and-register helper for Nelko BLE printers.
+
+Scans for advertising Nelko printers, lets the user pick one, and registers
+it as a CUPS queue via `lpadmin`. After this runs once, plain `lp -d <name>`
+prints work without further setup — CUPS stores the device URI.
+
+Requires: bleak, the `lpadmin` CLI, and that the `ble` CUPS backend is already
+installed (see README).
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import shutil
+import subprocess
+import sys
+
+try:
+    from bleak import BleakScanner
+except ImportError:
+    sys.exit("error: bleak is not installed. pip install bleak (or use the Nix flake).")
+
+
+NAME_HINTS = ("PL70", "PL420", "NELKO")
+PPD_BY_HINT = {
+    "PL70": "Nelko/PL70e-BT.ppd",
+    "PL420": "Nelko/PL420.ppd",
+}
+DEFAULT_PPD = "Nelko/PL70e-BT.ppd"
+
+
+def ppd_for(name: str) -> str:
+    upper = name.upper()
+    for hint, ppd in PPD_BY_HINT.items():
+        if hint in upper:
+            return ppd
+    return DEFAULT_PPD
+
+
+async def scan(timeout: float):
+    print(f"Scanning for {timeout:.0f}s... (printer must be powered on and not connected to a phone)")
+    devices = await BleakScanner.discover(timeout=timeout)
+    return [
+        d for d in devices
+        if d.name and any(hint in d.name.upper() for hint in NAME_HINTS)
+    ]
+
+
+def pick(devices) -> object:
+    if not devices:
+        sys.exit("error: no Nelko printers found in advertising range.")
+    if len(devices) == 1:
+        d = devices[0]
+        print(f"Found one printer: {d.name} @ {d.address}")
+        return d
+    print("Multiple printers found:")
+    for i, d in enumerate(devices, 1):
+        print(f"  [{i}] {d.name} @ {d.address}")
+    while True:
+        choice = input("Pick one (number): ").strip()
+        try:
+            return devices[int(choice) - 1]
+        except (ValueError, IndexError):
+            print("invalid choice")
+
+
+def register(name: str, mac: str, ppd: str, channel: str, page_size: str, default: bool) -> None:
+    if not shutil.which("lpadmin"):
+        sys.exit("error: lpadmin not on PATH. Install CUPS first.")
+    uri = f"ble://{mac.replace(':', '-')}?channel={channel}"
+    cmd = [
+        "sudo", "lpadmin",
+        "-p", name,
+        "-E",
+        "-v", uri,
+        "-m", ppd,
+        "-o", f"PageSize={page_size}",
+    ]
+    print(f"Running: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+    if default:
+        subprocess.run(["sudo", "lpadmin", "-d", name], check=True)
+    print(f"Registered queue '{name}'. Try: echo test | lp -d {name}")
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--name", default="PL70e", help="CUPS queue name (default: PL70e)")
+    p.add_argument("--channel", default="fff2", choices=["fff2", "fec7", "issc"],
+                   help="GATT write characteristic (default: fff2)")
+    p.add_argument("--page-size", default="w288h432",
+                   help="PPD PageSize (default: w288h432, i.e. 4x6\")")
+    p.add_argument("--ppd", default=None,
+                   help="Override the auto-selected PPD (e.g. Nelko/PL420.ppd)")
+    p.add_argument("--mac", default=None,
+                   help="Skip scanning and register this MAC directly")
+    p.add_argument("--scan-time", type=float, default=8.0,
+                   help="Scan duration in seconds (default: 8)")
+    p.add_argument("--default", action="store_true",
+                   help="Make this the system default printer")
+    args = p.parse_args()
+
+    if args.mac:
+        ppd = args.ppd or DEFAULT_PPD
+        register(args.name, args.mac, ppd, args.channel, args.page_size, args.default)
+        return 0
+
+    devices = asyncio.run(scan(args.scan_time))
+    device = pick(devices)
+    ppd = args.ppd or ppd_for(device.name or "")
+    register(args.name, device.address, ppd, args.channel, args.page_size, args.default)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
