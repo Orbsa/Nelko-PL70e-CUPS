@@ -1,8 +1,7 @@
 # nelko-pl70e-cups
 
 Linux CUPS driver for the [Nelko PL70e-BT](https://nelko.com/products/nelko-bluetooth-thermal-shipping-label-printer-pl70e) 4×6" thermal
-label printer over Bluetooth Low Energy. Connects directly via BLE — no phone
-app, no `cups-bluetooth` glue, no pairing.
+label printer over Bluetooth Low Energy. Connects directly via BLE
 
 This was reverse-engineered against firmware `v3.0.1.407`. It bundles three
 pieces:
