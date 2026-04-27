@@ -104,12 +104,16 @@ nelko-setup
 ```
 
 This scans for ~8 seconds, finds the printer by advertising name, and runs
-`sudo lpadmin` to create a queue named `PL70e` pointed at it. Common flags:
+`sudo lpadmin` to create a queue named `PL70e` pointed at it. The queue
+defaults to 4×6" media (`w288h432`), which matches the printer's stock
+label stock — `nelko-setup` with no flags is the right call for most users.
+
+Common flags:
 
 ```sh
 nelko-setup --name LabelPrinter --default
-nelko-setup --mac DC:0D:30:5A:A7:F5      # skip scanning
-nelko-setup --page-size Custom.50.8x25.4mm
+nelko-setup --mac DC:0D:30:5A:A7:F5         # skip scanning
+nelko-setup --page-size Custom.50.8x25.4mm  # override the 4x6" default
 ```
 
 After this, the queue persists in CUPS — every subsequent print is just:
