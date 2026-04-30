@@ -58,6 +58,23 @@ in
 
     # Ensure Bluetooth stack is present and powered (the BLE backend needs it).
     hardware.bluetooth.enable = true;
+    hardware.bluetooth.powerOnBoot = true;
+
+    # `powerOnBoot` only takes effect when bluez has no persisted state for the
+    # adapter. If the user (or another tool) has ever run `power off`, bluez
+    # writes `Powered=false` to /var/lib/bluetooth/<addr>/settings and respects
+    # it across reboots — leaving the BLE backend with no adapter to bind to.
+    # Force the adapter on after bluetoothd is up.
+    systemd.services.nelko-bluetooth-power-on = {
+      description = "Power on Bluetooth adapter for Nelko PL70e BLE backend";
+      after = [ "bluetooth.service" ];
+      requires = [ "bluetooth.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.bluez}/bin/bluetoothctl power on";
+      };
+    };
 
     # The cups-browsed/cupsd workers run as the `lp` user. They need to talk to
     # bluetoothd over D-Bus. polkit normally restricts org.bluez.* to active
